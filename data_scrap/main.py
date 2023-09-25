@@ -10,10 +10,18 @@ from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.support.wait import WebDriverWait
 
 
+
 class EkstraklasaScrapper:
-    def __init__(self):
+    def __init__(self, season_number):
+        # https://www.ekstraklasa.org/terminarz only display 3 last seasons
+        self.season_number = season_number
         self.driver = webdriver.Chrome()
         self.round = ''
+        self.seasons = [
+             '2021_2022',
+             '2022_2023',
+             '2023_2024'
+        ]
 
     def get_column_names(self) -> List[str]:
         col_names = ['possession', 'shots', 'shots_on_target', 'corners', 'passes', 'accurate_passes', 'crosses',
@@ -25,9 +33,24 @@ class EkstraklasaScrapper:
             return_value.append(col + '_2nd')
         return return_value
 
-    def load_matches_data_for_round(self, number_of_clicks) -> pd.DataFrame:
-        data_row = {}
+    def team_comparison_title_to_col_name(self, title: str) -> str:
+        return {
+            'POSIADANIE PIŁKI %': 'possession',
+            'STRZAŁY': 'shots',
+            'CELNE STRZAŁY': 'shots_on_target',
+            'RZUTY ROŻNE': 'corners',
+            'PODANIA': 'passes',
+            'PODANIA CELNE': 'accurate_passes',
+            'DOŚRODKOWANIA': 'crosses',
+            'DOŚRODKOWANIA CELNE': 'accurate_crosses',
+            'ODBIORY UDANE': 'successful_tackles',
+            'FAULE': 'fouls',
+            'SPALONE': 'offsides',
+            'ŻÓŁTE KARTKI': 'yellow_cards',
+            'CZERWONE KARTKI': 'red_cards'
+        }[title.upper()]
 
+    def load_matches_data_for_round(self, number_of_clicks) -> pd.DataFrame:
         match_results = WebDriverWait(self.driver, 10).until(
             EC.presence_of_all_elements_located((By.CSS_SELECTOR, 'app-league-widget-schedule:first-of-type '
                                                                   'app-league-widget-schedule-match '
@@ -38,6 +61,11 @@ class EkstraklasaScrapper:
         for i in range(number_of_matches):
             for index in range(number_of_clicks):
                 self.change_round()
+
+            data_row = {}
+            # assign empty values to let python know what columns we have
+            for name in self.get_column_names():
+                data_row[name] = float("nan")
 
             round_header = self.driver.find_element(By.CSS_SELECTOR, 'app-league-widget-schedule:first-of-type '
                                                                      'span.text-center')
@@ -90,15 +118,17 @@ class EkstraklasaScrapper:
             # there are 13 statistics (for each team) about a match which should be present in 'comparisons'
 
             col_names = self.get_column_names()
-            for index in range(len(comparisons)):
-                comp = comparisons[index]
+            for comp in comparisons:
                 soup = BeautifulSoup(comp.get_attribute("innerHTML"), features="html.parser")
                 spans = soup.find_all('span', {'class': ['text-cyan', 'text-2xl']})
+                comparison_title = soup.select_one('div.w-full.px-4.text-center span')
+                title_text = BeautifulSoup.get_text(comparison_title)
+                col_name_from_title = self.team_comparison_title_to_col_name(title_text)
                 # set result for the first team
-                data_row[col_names[2 * index]] = BeautifulSoup.get_text(spans[0])
+                data_row[f"{col_name_from_title}_1st"] = BeautifulSoup.get_text(spans[0])
 
                 # set result for the second team
-                data_row[col_names[2 * index + 1]] = BeautifulSoup.get_text(spans[1])
+                data_row[f"{col_name_from_title}_2nd"] = BeautifulSoup.get_text(spans[1])
 
             df = pd.concat([df, pd.DataFrame(data_row, index=[0])])
             self.driver.back()
@@ -147,6 +177,7 @@ class EkstraklasaScrapper:
             df = pd.concat([df, round_df])
 
             if self.round == '1':
+            #if while_index == 1:
                 break
 
         print(df)
@@ -155,14 +186,14 @@ class EkstraklasaScrapper:
     def scrap_and_save(self) -> None:
         df = self.scrap_data()
         df.fillna('MISSING')
-        df.to_csv('data.csv', encoding='utf-8', index=False)
+        df.to_csv(f'data_{self.seasons[self.season_number]}.csv', encoding='utf-8', index=False)
 
 
 # Press the green button in the gutter to run the script.
 if __name__ == '__main__':
     print('START')
     # scrap()
-    scrapper = EkstraklasaScrapper()
+    scrapper = EkstraklasaScrapper(0)
     scrapper.scrap_and_save()
 
 # See PyCharm help at https://www.jetbrains.com/help/pycharm/
