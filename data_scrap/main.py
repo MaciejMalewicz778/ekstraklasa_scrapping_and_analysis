@@ -193,7 +193,7 @@ class EkstraklasaScrapper:
 if __name__ == '__main__':
     print('START')
     # scrap()
-    scrapper = EkstraklasaScrapper(0)
+    scrapper = EkstraklasaScrapper(1)
     scrapper.scrap_and_save()
 
 # See PyCharm help at https://www.jetbrains.com/help/pycharm/
